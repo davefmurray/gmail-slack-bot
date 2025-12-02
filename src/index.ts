@@ -23,8 +23,44 @@ const app = new App({
 // SLASH COMMANDS
 // ===================
 
-// /gmail - List recent emails
+// /gmail - Natural language Gmail assistant powered by Claude (main command)
 app.command('/gmail', async ({ command, ack, respond }) => {
+  await ack();
+
+  const request = command.text.trim();
+  if (!request) {
+    await respond({
+      response_type: 'ephemeral',
+      text: `📧 *Gmail Assistant*\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\nType \`/gmail-help\` for all available commands.`,
+    });
+    return;
+  }
+
+  // Send a "thinking" message since Claude may take a moment
+  await respond({
+    response_type: 'ephemeral',
+    text: '🤔 Processing your request...',
+  });
+
+  try {
+    const result = await processNaturalLanguageRequest(request);
+    await respond({
+      response_type: 'ephemeral',
+      text: `🤖 *Gmail Assistant*\n\n${result}`,
+      replace_original: true,
+    });
+  } catch (error) {
+    console.error('Error processing natural language request:', error);
+    await respond({
+      response_type: 'ephemeral',
+      text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      replace_original: true,
+    });
+  }
+});
+
+// /gmail-list - List recent emails
+app.command('/gmail-list', async ({ command, ack, respond }) => {
   await ack();
 
   try {
@@ -241,42 +277,6 @@ app.command('/gmail-trash', async ({ command, ack, respond }) => {
   }
 });
 
-// /gmail-ask - Natural language Gmail assistant powered by Claude
-app.command('/gmail-ask', async ({ command, ack, respond }) => {
-  await ack();
-
-  const request = command.text.trim();
-  if (!request) {
-    await respond({
-      response_type: 'ephemeral',
-      text: '❌ Please provide a request. Example: `/gmail-ask show me unread emails from this week`',
-    });
-    return;
-  }
-
-  // Send a "thinking" message since Claude may take a moment
-  await respond({
-    response_type: 'ephemeral',
-    text: '🤔 Processing your request...',
-  });
-
-  try {
-    const result = await processNaturalLanguageRequest(request);
-    await respond({
-      response_type: 'ephemeral',
-      text: `🤖 *Gmail Assistant*\n\n${result}`,
-      replace_original: true,
-    });
-  } catch (error) {
-    console.error('Error processing natural language request:', error);
-    await respond({
-      response_type: 'ephemeral',
-      text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      replace_original: true,
-    });
-  }
-});
-
 // /gmail-help - Show available commands
 app.command('/gmail-help', async ({ ack, respond }) => {
   await ack();
@@ -284,28 +284,30 @@ app.command('/gmail-help', async ({ ack, respond }) => {
   const helpText = `
 *📧 Gmail Slack Bot Commands*
 
-*🤖 AI-Powered (Natural Language):*
-\`/gmail-ask <anything>\` - Ask in plain English!
-  • "Show me emails from last week"
-  • "Find unread emails with attachments"
-  • "Compose a professional email to john@example.com about the meeting"
-  • "What are my most recent emails from Amazon?"
+*🤖 Main Command (Natural Language):*
+\`/gmail <anything>\` - Just ask in plain English!
+  • \`/gmail show me unread emails\`
+  • \`/gmail emails from last week with attachments\`
+  • \`/gmail send an email to john@example.com about the meeting\`
+  • \`/gmail find large emails over 5MB\`
+  • \`/gmail star all emails from my boss\`
+  • \`/gmail promotional emails I can unsubscribe from\`
 
 *📋 Direct Commands:*
-\`/gmail [count]\` - List recent emails (default: 5, max: 10)
+\`/gmail-list [count]\` - List recent emails (default: 5, max: 10)
 \`/gmail-unread [count]\` - List unread emails
-\`/gmail-search <query>\` - Search emails (uses Gmail search syntax)
+\`/gmail-search <query>\` - Search with Gmail syntax
 \`/gmail-read <id>\` - Read a specific email by ID
 \`/gmail-send to@email | Subject | Body\` - Send an email
 \`/gmail-mark-read <id>\` - Mark email as read
 \`/gmail-trash <id>\` - Move email to trash
 \`/gmail-help\` - Show this help message
 
-*Search Examples:*
-• \`/gmail-search from:boss@company.com\`
-• \`/gmail-search subject:urgent\`
-• \`/gmail-search is:starred\`
-• \`/gmail-search after:2024/01/01\`
+*Gmail Search Syntax (for /gmail-search):*
+• \`from:boss@company.com\` • \`is:unread\`
+• \`has:attachment\` • \`filename:pdf\`
+• \`larger:5M\` • \`newer_than:7d\`
+• \`category:promotions\` • \`label:work\`
 `;
 
   await respond({
