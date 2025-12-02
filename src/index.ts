@@ -282,32 +282,45 @@ app.command('/gmail-help', async ({ ack, respond }) => {
   await ack();
 
   const helpText = `
-*📧 Gmail Slack Bot Commands*
+*📧 Gmail Slack Bot - Full Feature List*
 
-*🤖 Main Command (Natural Language):*
-\`/gmail <anything>\` - Just ask in plain English!
-  • \`/gmail show me unread emails\`
-  • \`/gmail emails from last week with attachments\`
-  • \`/gmail send an email to john@example.com about the meeting\`
-  • \`/gmail find large emails over 5MB\`
-  • \`/gmail star all emails from my boss\`
-  • \`/gmail promotional emails I can unsubscribe from\`
+*🤖 Main Command:* \`/gmail <anything>\` - Ask in plain English!
+
+*📬 EMAIL OPERATIONS (17):*
+• List/search emails • Read email content
+• Send new emails • Reply to emails (+ reply all)
+• Forward emails • Mark as read/unread
+• Star/unstar emails • Archive emails
+• Trash emails • Restore from trash
+• Permanently delete • Get unread count
+• Batch modify labels • Batch star emails
+• Get email by ID • Search with any Gmail operator
+
+*🧵 THREADS (1):*
+• Get full email conversation thread
+
+*📎 ATTACHMENTS (2):*
+• List email attachments • Download attachments
+
+*🏷️ LABELS (4):*
+• List all labels • Create labels
+• Update/rename labels • Delete labels
+
+*✉️ DRAFTS (6):*
+• List drafts • Get draft content
+• Create new draft • Update draft
+• Delete draft • Send draft
+
+*⚙️ SETTINGS (2):*
+• Get vacation responder • Set vacation auto-reply
+
+*🔗 MARKETING (2):*
+• Find marketing emails • Get unsubscribe links
 
 *📋 Direct Commands:*
-\`/gmail-list [count]\` - List recent emails (default: 5, max: 10)
-\`/gmail-unread [count]\` - List unread emails
-\`/gmail-search <query>\` - Search with Gmail syntax
-\`/gmail-read <id>\` - Read a specific email by ID
-\`/gmail-send to@email | Subject | Body\` - Send an email
-\`/gmail-mark-read <id>\` - Mark email as read
-\`/gmail-trash <id>\` - Move email to trash
-\`/gmail-help\` - Show this help message
-
-*Gmail Search Syntax (for /gmail-search):*
-• \`from:boss@company.com\` • \`is:unread\`
-• \`has:attachment\` • \`filename:pdf\`
-• \`larger:5M\` • \`newer_than:7d\`
-• \`category:promotions\` • \`label:work\`
+\`/gmail-list\` \`/gmail-unread\` \`/gmail-search\`
+\`/gmail-read\` \`/gmail-send\` \`/gmail-mark-read\`
+\`/gmail-trash\` \`/gmail-help\`
 `;
 
   await respond({
