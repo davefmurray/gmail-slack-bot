@@ -57,7 +57,7 @@ app.command('/gmail', async ({ command, ack, respond }) => {
   if (!request) {
     await respond({
       response_type: 'ephemeral',
-      text: `📧 *Gmail Assistant* (with conversation memory!)\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\n*Conversation Commands:*\n• \`/gmail clear\` - Reset conversation memory\n\nType \`/gmail-help\` for all available commands.`,
+      text: `📧 *Gmail Assistant* (with conversation memory!)\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\n*Conversation Commands:*\n• \`/gmail clear\` - Reset conversation memory\n• \`/gmail reset\` - Reset (alias)\n• \`/gmail start over\` - Reset (alias)\n\nType \`/gmail-help\` for all available commands.`,
     });
     return;
   }
@@ -320,7 +320,7 @@ app.command('/gmail-help', async ({ ack, respond }) => {
 *🧠 CONVERSATION FEATURES:*
 • Multi-turn conversations - refer to previous results
 • Say "unsubscribe from 1, 3, 5" after seeing a list
-• \`/gmail clear\` - Reset conversation memory
+• \`/gmail clear\` or \`reset\` or \`start over\` - Reset memory
 
 *📬 EMAIL OPERATIONS (17):*
 • List/search emails • Read email content

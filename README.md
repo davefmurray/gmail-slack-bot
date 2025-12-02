@@ -40,6 +40,8 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 |---------|-------------|
 | `/gmail <anything>` | Ask in plain English - Claude handles it! |
 | `/gmail clear` | Reset conversation memory and start fresh |
+| `/gmail reset` | Reset conversation memory (alias) |
+| `/gmail start over` | Reset conversation memory (alias) |
 
 **Conversation Memory:** The bot remembers your conversation for 30 minutes! You can reference previous results:
 
