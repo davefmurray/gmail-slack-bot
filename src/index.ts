@@ -20,6 +20,73 @@ const app = new App({
 });
 
 // ===================
+// THREAD SESSION MANAGEMENT
+// ===================
+
+interface ThreadSession {
+  userId: string;
+  channelId: string;
+  threadTs: string;
+  lastActivity: number;
+}
+
+// Active thread sessions: key = `${channelId}:${threadTs}`
+const activeSessions = new Map<string, ThreadSession>();
+
+// Session timeout: 30 minutes
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+function getSessionKey(channelId: string, threadTs: string): string {
+  return `${channelId}:${threadTs}`;
+}
+
+function cleanupExpiredSessions() {
+  const now = Date.now();
+  for (const [key, session] of activeSessions.entries()) {
+    if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
+      activeSessions.delete(key);
+      clearConversation(session.userId);
+    }
+  }
+}
+
+function isActiveSession(channelId: string, threadTs: string): boolean {
+  cleanupExpiredSessions();
+  return activeSessions.has(getSessionKey(channelId, threadTs));
+}
+
+function getSession(channelId: string, threadTs: string): ThreadSession | undefined {
+  cleanupExpiredSessions();
+  const session = activeSessions.get(getSessionKey(channelId, threadTs));
+  if (session) {
+    session.lastActivity = Date.now();
+  }
+  return session;
+}
+
+function createSession(userId: string, channelId: string, threadTs: string): ThreadSession {
+  const session: ThreadSession = {
+    userId,
+    channelId,
+    threadTs,
+    lastActivity: Date.now(),
+  };
+  activeSessions.set(getSessionKey(channelId, threadTs), session);
+  return session;
+}
+
+function endSession(channelId: string, threadTs: string): boolean {
+  const key = getSessionKey(channelId, threadTs);
+  const session = activeSessions.get(key);
+  if (session) {
+    clearConversation(session.userId);
+    activeSessions.delete(key);
+    return true;
+  }
+  return false;
+}
+
+// ===================
 // SLASH COMMANDS
 // ===================
 
@@ -37,11 +104,12 @@ function logRequest(userId: string, command: string, status: 'start' | 'success'
 }
 
 // /gmail - Natural language Gmail assistant powered by Claude (main command)
-// Now with conversation memory per user!
-app.command('/gmail', async ({ command, ack, respond }) => {
+// Now with conversation memory per user and thread session support!
+app.command('/gmail', async ({ command, ack, respond, client }) => {
   await ack();
 
   const userId = command.user_id;
+  const channelId = command.channel_id;
   const request = command.text.trim();
 
   // Check for clear/reset commands
@@ -54,10 +122,35 @@ app.command('/gmail', async ({ command, ack, respond }) => {
     return;
   }
 
+  // Check for session start command
+  if (request.toLowerCase() === 'start') {
+    // Post a message to the channel to start a thread
+    const result = await client.chat.postMessage({
+      channel: channelId,
+      text: `🟢 *Gmail Session Started* for <@${userId}>\n\nReply in this thread to chat with your Gmail assistant. I'll remember our conversation!\n\n_Type \`stop\` or \`done\` to end the session. Session expires after 30 minutes of inactivity._`,
+    });
+
+    if (result.ts) {
+      createSession(userId, channelId, result.ts);
+      logRequest(userId, 'session_start', 'success');
+    }
+    return;
+  }
+
+  // Check for session stop command (for ephemeral use outside threads)
+  if (request.toLowerCase() === 'stop' || request.toLowerCase() === 'done') {
+    clearConversation(userId);
+    await respond({
+      response_type: 'ephemeral',
+      text: `🔴 Session ended. Use \`/gmail start\` to begin a new session.`,
+    });
+    return;
+  }
+
   if (!request) {
     await respond({
       response_type: 'ephemeral',
-      text: `📧 *Gmail Assistant* (with conversation memory!)\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\n*Conversation Commands:*\n• \`/gmail clear\` - Reset conversation memory\n• \`/gmail reset\` - Reset (alias)\n• \`/gmail start over\` - Reset (alias)\n\nType \`/gmail-help\` for all available commands.`,
+      text: `📧 *Gmail Assistant* (with conversation memory!)\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\n*Session Mode:*\n• \`/gmail start\` - Start a thread session (no /gmail needed per message!)\n\n*Conversation Commands:*\n• \`/gmail clear\` - Reset conversation memory\n• \`/gmail reset\` - Reset (alias)\n• \`/gmail start over\` - Reset (alias)\n\nType \`/gmail-help\` for all available commands.`,
     });
     return;
   }
@@ -315,7 +408,13 @@ app.command('/gmail-help', async ({ ack, respond }) => {
 *📧 Gmail Slack Bot - Full Feature List*
 
 *🤖 Main Command:* \`/gmail <anything>\` - Ask in plain English!
-💬 *NEW: Conversation memory!* I remember our chat for 30 mins.
+💬 *Conversation memory!* I remember our chat for 30 mins.
+
+*🧵 THREAD SESSION MODE:*
+• \`/gmail start\` - Start a session thread (no /gmail needed!)
+• Just type naturally in the thread
+• Type \`stop\`, \`done\`, or \`end\` to end the session
+• Session auto-expires after 30 mins of inactivity
 
 *🧠 CONVERSATION FEATURES:*
 • Multi-turn conversations - refer to previous results
@@ -363,6 +462,93 @@ app.command('/gmail-help', async ({ ack, respond }) => {
     response_type: 'ephemeral',
     text: helpText,
   });
+});
+
+// ===================
+// MESSAGE LISTENER FOR THREAD SESSIONS
+// ===================
+
+// Listen for messages in threads where we have an active session
+app.message(async ({ message, client }) => {
+  // Type guard for regular messages
+  if (message.subtype !== undefined) return;
+
+  const msg = message as { text?: string; user?: string; channel?: string; thread_ts?: string; ts?: string };
+
+  // Only process threaded messages
+  if (!msg.thread_ts) return;
+
+  const channelId = msg.channel;
+  const threadTs = msg.thread_ts;
+  const userId = msg.user;
+  const text = msg.text?.trim();
+
+  if (!channelId || !threadTs || !userId || !text) return;
+
+  // Check if this is an active session thread
+  const session = getSession(channelId, threadTs);
+  if (!session) return;
+
+  // Only respond to the user who started the session
+  if (session.userId !== userId) return;
+
+  // Check for stop commands
+  if (text.toLowerCase() === 'stop' || text.toLowerCase() === 'done' || text.toLowerCase() === 'end') {
+    endSession(channelId, threadTs);
+    logRequest(userId, 'session_end', 'success');
+    await client.chat.postMessage({
+      channel: channelId,
+      thread_ts: threadTs,
+      text: `🔴 *Gmail Session Ended*\n\nThanks for using Gmail Assistant! Use \`/gmail start\` to begin a new session.`,
+    });
+    return;
+  }
+
+  // Check for clear/reset commands
+  if (text.toLowerCase() === 'clear' || text.toLowerCase() === 'reset' || text.toLowerCase() === 'start over') {
+    clearConversation(userId);
+    await client.chat.postMessage({
+      channel: channelId,
+      thread_ts: threadTs,
+      text: `🔄 Conversation cleared! Starting fresh. What would you like to do?`,
+    });
+    return;
+  }
+
+  // Process the request through Claude
+  logRequest(userId, text, 'start');
+
+  // Show typing indicator by posting a temporary message
+  const typingMsg = await client.chat.postMessage({
+    channel: channelId,
+    thread_ts: threadTs,
+    text: '🤔 Processing...',
+  });
+
+  try {
+    const result = await processNaturalLanguageRequest(text, userId);
+    logRequest(userId, text, 'success');
+
+    // Update the typing message with the actual response
+    if (typingMsg.ts) {
+      await client.chat.update({
+        channel: channelId,
+        ts: typingMsg.ts,
+        text: `> _${text}_\n\n🤖 *Gmail Assistant*\n\n${result}`,
+      });
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    logRequest(userId, text, 'error', errorMsg);
+
+    if (typingMsg.ts) {
+      await client.chat.update({
+        channel: channelId,
+        ts: typingMsg.ts,
+        text: `> _${text}_\n\n❌ Error: ${errorMsg}`,
+      });
+    }
+  }
 });
 
 // Start the app

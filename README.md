@@ -6,6 +6,7 @@ A Slack bot that lets you manage your Gmail inbox directly from Slack using natu
 
 - 🤖 **Natural Language** - Just type `/gmail` and ask in plain English
 - 💬 **Conversation Memory** - Multi-turn conversations for complex tasks (30-min timeout)
+- 🧵 **Thread Sessions** - Start a session with `/gmail start` and chat naturally in the thread
 - 📬 **Full Gmail Access** - List, search, read, send, star, archive, and more
 - 🔍 **Smart Search** - All Gmail search operators supported
 - ✉️ **Compose Emails** - Claude helps write professional emails
@@ -39,6 +40,7 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 | Command | Description |
 |---------|-------------|
 | `/gmail <anything>` | Ask in plain English - Claude handles it! |
+| `/gmail start` | Start a thread session - just type naturally! |
 | `/gmail clear` | Reset conversation memory and start fresh |
 | `/gmail reset` | Reset conversation memory (alias) |
 | `/gmail start over` | Reset conversation memory (alias) |
@@ -57,6 +59,23 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 
 /gmail trash the second one
 > 🗑️ LinkedIn Updates moved to trash
+```
+
+**Thread Sessions:** For extended conversations without typing `/gmail` each time:
+
+```
+/gmail start
+> 🟢 Gmail Session Started for @you
+> Reply in this thread to chat with your Gmail assistant!
+
+(in thread) show me unread emails
+> 🤖 Here are your unread emails...
+
+(in thread) star the first one
+> ⭐ Email starred!
+
+(in thread) done
+> 🔴 Gmail Session Ended
 ```
 
 **Examples:**
@@ -129,17 +148,33 @@ after:2024/01/01    before:2024/12/31    newer_than:7d    older_than:1m
 
 1. Go to **OAuth & Permissions** in the sidebar
 2. Under **Scopes** → **Bot Token Scopes**, add:
-   - `commands`
-   - `chat:write`
+   - `commands` - For slash commands
+   - `chat:write` - For posting messages
+   - `channels:history` - For reading thread messages (public channels)
+   - `groups:history` - For reading thread messages (private channels)
+   - `im:history` - For reading thread messages (DMs)
+   - `mpim:history` - For reading thread messages (group DMs)
 3. Click **Install to Workspace** at the top
 4. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
 
-### Step 3: Get Signing Secret
+### Step 3: Enable Event Subscriptions (for Thread Sessions)
+
+1. Go to **Event Subscriptions** in the sidebar
+2. Toggle **Enable Events** to On
+3. Set **Request URL** to: `https://your-app.railway.app/slack/events`
+4. Under **Subscribe to bot events**, add:
+   - `message.channels` - Messages in public channels
+   - `message.groups` - Messages in private channels
+   - `message.im` - Direct messages
+   - `message.mpim` - Group direct messages
+5. Click **Save Changes**
+
+### Step 4: Get Signing Secret
 
 1. Go to **Basic Information** in the sidebar
 2. Under **App Credentials**, copy the **Signing Secret**
 
-### Step 4: Deploy to Railway
+### Step 5: Deploy to Railway
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template)
 
@@ -150,7 +185,7 @@ Or deploy manually:
 3. Connect your GitHub repo
 4. Add environment variables (see below)
 
-### Step 5: Configure Environment Variables
+### Step 6: Configure Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -161,7 +196,7 @@ Or deploy manually:
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude AI |
 | `PORT` | No | Server port (default: 3000) |
 
-### Step 6: Add Slash Commands
+### Step 7: Add Slash Commands
 
 1. Go to **Slash Commands** in the sidebar
 2. Create each command with the Request URL:
@@ -181,7 +216,7 @@ Or deploy manually:
 | `/gmail-trash` | `https://your-app.railway.app/slack/events` | Trash an email |
 | `/gmail-help` | `https://your-app.railway.app/slack/events` | Show help |
 
-### Step 7: Reinstall the App
+### Step 8: Reinstall the App
 
 After adding slash commands, go to **OAuth & Permissions** and click **Reinstall to Workspace**.
 
