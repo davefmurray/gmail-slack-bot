@@ -11,6 +11,15 @@ import {
   sendEmail,
   markAsRead,
   trashEmail,
+  createLabel,
+  deleteLabel,
+  starEmail,
+  unstarEmail,
+  archiveEmail,
+  batchModifyEmails,
+  getLabels,
+  getUnsubscribeInfo,
+  findMarketingEmails,
   formatEmailForSlack,
   formatEmailListForSlack,
 } from './gmail-client.js';
@@ -21,20 +30,49 @@ const anthropic = new Anthropic();
 const tools: Anthropic.Tool[] = [
   {
     name: 'search_emails',
-    description: `Search for emails using Gmail search syntax. Common operators:
-- from:sender@email.com - emails from specific sender
-- to:recipient@email.com - emails to specific recipient
-- subject:word - emails with word in subject
-- is:unread - unread emails
+    description: `Search for emails using Gmail search syntax. ALL Gmail search operators are supported:
+
+PEOPLE:
+- from:sender@email.com - from specific sender
+- to:recipient@email.com - to specific recipient
+- cc:email - carbon copied
+- bcc:email - blind carbon copied
+- deliveredto:email - delivered to address
+
+CONTENT:
+- subject:word - word in subject
+- "exact phrase" - exact phrase match
+- word1 OR word2 - either word
+- -word - exclude word
+- +word - exact word match
+- word1 AROUND n word2 - words within n words of each other
+
+STATUS:
+- is:unread / is:read - read status
 - is:starred - starred emails
-- has:attachment - emails with attachments
-- after:YYYY/MM/DD - emails after date
-- before:YYYY/MM/DD - emails before date
-- label:labelname - emails with specific label
-- in:inbox, in:sent, in:trash - emails in specific folder
-- newer_than:7d - emails from last 7 days (use d for days, m for months, y for years)
-- older_than:1m - emails older than 1 month
-Combine multiple operators: "from:boss@company.com is:unread after:2024/01/01"`,
+- is:important - important emails
+- is:snoozed - snoozed emails
+
+ATTACHMENTS:
+- has:attachment - has any attachment
+- has:drive / has:document / has:spreadsheet / has:presentation - Google Drive files
+- has:youtube - YouTube links
+- filename:pdf - attachment filename/type
+- larger:5M / smaller:1M - size filters (K, M for KB, MB)
+
+LOCATION:
+- in:inbox / in:sent / in:drafts / in:trash / in:spam / in:anywhere
+- label:labelname - has specific label
+- category:primary / category:social / category:promotions / category:updates / category:forums
+
+TIME:
+- after:YYYY/MM/DD / before:YYYY/MM/DD - date range
+- newer_than:7d / older_than:1m - relative time (d=days, m=months, y=years)
+
+OTHER:
+- list:listname@domain.com - mailing list emails
+
+Combine operators: "from:boss@company.com is:unread has:attachment after:2024/01/01"`,
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -127,6 +165,145 @@ Combine multiple operators: "from:boss@company.com is:unread after:2024/01/01"`,
       required: ['messageId'],
     },
   },
+  {
+    name: 'create_label',
+    description: 'Create a new Gmail label for organizing emails',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: {
+          type: 'string',
+          description: 'The name for the new label',
+        },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'delete_label',
+    description: 'Delete a Gmail label',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        labelId: {
+          type: 'string',
+          description: 'The ID of the label to delete',
+        },
+      },
+      required: ['labelId'],
+    },
+  },
+  {
+    name: 'get_labels',
+    description: 'Get all Gmail labels. Use this to find label IDs for applying labels to emails.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'star_email',
+    description: 'Star an email to mark it as important',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageId: {
+          type: 'string',
+          description: 'The email message ID to star',
+        },
+      },
+      required: ['messageId'],
+    },
+  },
+  {
+    name: 'unstar_email',
+    description: 'Remove star from an email',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageId: {
+          type: 'string',
+          description: 'The email message ID to unstar',
+        },
+      },
+      required: ['messageId'],
+    },
+  },
+  {
+    name: 'archive_email',
+    description: 'Archive an email (remove from inbox but keep in All Mail)',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageId: {
+          type: 'string',
+          description: 'The email message ID to archive',
+        },
+      },
+      required: ['messageId'],
+    },
+  },
+  {
+    name: 'batch_star_emails',
+    description: 'Star multiple emails at once. Use this when the user wants to star all emails from a sender or matching a search.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of email message IDs to star',
+        },
+      },
+      required: ['messageIds'],
+    },
+  },
+  {
+    name: 'batch_apply_label',
+    description: 'Apply a label to multiple emails at once',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of email message IDs',
+        },
+        labelId: {
+          type: 'string',
+          description: 'The label ID to apply',
+        },
+      },
+      required: ['messageIds', 'labelId'],
+    },
+  },
+  {
+    name: 'find_marketing_emails',
+    description: 'Find promotional/marketing emails that the user might want to unsubscribe from. Returns emails with unsubscribe links.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        maxResults: {
+          type: 'number',
+          description: 'Maximum number of marketing emails to find (default: 10)',
+        },
+      },
+    },
+  },
+  {
+    name: 'get_unsubscribe_info',
+    description: 'Get unsubscribe links for a specific email. Use this to help users unsubscribe from newsletters.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        messageId: {
+          type: 'string',
+          description: 'The email message ID to get unsubscribe info for',
+        },
+      },
+      required: ['messageId'],
+    },
+  },
 ];
 
 // Execute a tool call
@@ -190,6 +367,135 @@ async function executeTool(
       return `❌ Failed to trash email`;
     }
 
+    case 'create_label': {
+      const label = await createLabel(input.name as string);
+      if (label) {
+        return `✅ Label created: "${input.name}" (ID: ${label.id})`;
+      }
+      return `❌ Failed to create label`;
+    }
+
+    case 'delete_label': {
+      const success = await deleteLabel(input.labelId as string);
+      if (success) {
+        return `✅ Label deleted`;
+      }
+      return `❌ Failed to delete label`;
+    }
+
+    case 'get_labels': {
+      const labels = await getLabels();
+      if (labels.length === 0) {
+        return 'No labels found.';
+      }
+      const userLabels = labels.filter(l => l.type === 'user');
+      const systemLabels = labels.filter(l => l.type === 'system');
+
+      let result = '*Your Labels:*\n';
+      if (userLabels.length > 0) {
+        result += userLabels.map(l => `• ${l.name} (ID: \`${l.id}\`)`).join('\n');
+      } else {
+        result += '_No custom labels_';
+      }
+      result += '\n\n*System Labels:*\n';
+      result += systemLabels.slice(0, 10).map(l => `• ${l.name}`).join('\n');
+      return result;
+    }
+
+    case 'star_email': {
+      const success = await starEmail(input.messageId as string);
+      if (success) {
+        return `⭐ Email starred: ${input.messageId}`;
+      }
+      return `❌ Failed to star email`;
+    }
+
+    case 'unstar_email': {
+      const success = await unstarEmail(input.messageId as string);
+      if (success) {
+        return `✅ Star removed from email: ${input.messageId}`;
+      }
+      return `❌ Failed to unstar email`;
+    }
+
+    case 'archive_email': {
+      const success = await archiveEmail(input.messageId as string);
+      if (success) {
+        return `📁 Email archived: ${input.messageId}`;
+      }
+      return `❌ Failed to archive email`;
+    }
+
+    case 'batch_star_emails': {
+      const messageIds = input.messageIds as string[];
+      const success = await batchModifyEmails(messageIds, ['STARRED'], undefined);
+      if (success) {
+        return `⭐ Starred ${messageIds.length} emails`;
+      }
+      return `❌ Failed to star emails`;
+    }
+
+    case 'batch_apply_label': {
+      const messageIds = input.messageIds as string[];
+      const labelId = input.labelId as string;
+      const success = await batchModifyEmails(messageIds, [labelId], undefined);
+      if (success) {
+        return `✅ Applied label to ${messageIds.length} emails`;
+      }
+      return `❌ Failed to apply label`;
+    }
+
+    case 'find_marketing_emails': {
+      const maxResults = (input.maxResults as number) || 10;
+      const emails = await findMarketingEmails(maxResults);
+      if (emails.length === 0) {
+        return 'No marketing emails found.';
+      }
+
+      let result = `*Found ${emails.length} marketing/promotional emails:*\n\n`;
+      for (const email of emails) {
+        result += `*${email.subject}*\n`;
+        result += `From: ${email.from}\n`;
+        result += `ID: \`${email.id}\`\n`;
+        if (email.hasUnsubscribe) {
+          if (email.unsubscribeLinks.length > 0) {
+            result += `🔗 Unsubscribe: ${email.unsubscribeLinks[0]}\n`;
+          } else if (email.unsubscribeEmail) {
+            result += `📧 Unsubscribe email: ${email.unsubscribeEmail}\n`;
+          }
+        } else {
+          result += `⚠️ No unsubscribe link found\n`;
+        }
+        result += '\n';
+      }
+      return result;
+    }
+
+    case 'get_unsubscribe_info': {
+      const info = await getUnsubscribeInfo(input.messageId as string);
+      if (!info) {
+        return `❌ Could not get unsubscribe info for email: ${input.messageId}`;
+      }
+
+      let result = `*Unsubscribe Info for:* ${info.email.subject}\n`;
+      result += `*From:* ${info.email.from}\n\n`;
+
+      if (info.hasUnsubscribe) {
+        if (info.unsubscribeLinks.length > 0) {
+          result += `*Unsubscribe Links:*\n`;
+          for (const link of info.unsubscribeLinks) {
+            result += `• ${link}\n`;
+          }
+        }
+        if (info.unsubscribeEmail) {
+          result += `\n*Unsubscribe Email:* ${info.unsubscribeEmail}`;
+        }
+      } else {
+        result += `⚠️ No unsubscribe option found in this email.`;
+      }
+      return result;
+    }
+
     default:
       return `Unknown tool: ${name}`;
   }
@@ -226,6 +532,12 @@ Your capabilities:
 - Send emails (compose professional messages when asked)
 - Mark emails as read
 - Move emails to trash
+- Create, delete, and manage labels
+- Star/unstar emails
+- Archive emails
+- Batch operations (star all emails from a sender, apply labels to multiple emails)
+- Find marketing/promotional emails and help users unsubscribe
+- Get unsubscribe links from emails
 
 Guidelines:
 - When users ask about "recent" or "latest" emails, use list_recent_emails
@@ -236,11 +548,32 @@ Guidelines:
 - If you need more information to complete a request (like an email address to send to), ask for it
 
 Examples of query conversions:
-- "emails from last week" → search with "newer_than:7d"
-- "unread emails from John" → search with "from:john is:unread"
-- "emails with attachments" → search with "has:attachment"
-- "important emails" → search with "is:important" or "label:important"
-- "starred emails" → search with "is:starred"`;
+- "emails from last week" → "newer_than:7d"
+- "unread emails from John" → "from:john is:unread"
+- "emails with attachments" → "has:attachment"
+- "important emails" → "is:important"
+- "starred emails" → "is:starred"
+- "large emails over 5MB" → "larger:5M"
+- "emails with PDF attachments" → "filename:pdf"
+- "social media notifications" → "category:social"
+- "promotional emails" → "category:promotions"
+- "emails CC'd to me" → "cc:me"
+- "emails from Amazon or eBay" → "from:amazon OR from:ebay"
+- "emails about meeting but not calendar" → "meeting -calendar"
+- "Google Doc attachments" → "has:document"
+- "emails from mailing lists" → "list:*"
+- "snoozed emails" → "is:snoozed"
+- "emails mentioning budget near report" → "budget AROUND 5 report"
+
+For unsubscribe requests:
+- Use find_marketing_emails to find promotional emails with unsubscribe links
+- Use get_unsubscribe_info to get unsubscribe details for a specific email
+- Present unsubscribe links clearly so users can click them
+
+For batch operations:
+- First search for the emails to get their IDs
+- Then use batch_star_emails or batch_apply_label with the IDs
+- Example: "Star all emails from boss@company.com" → search, collect IDs, then batch star`;
 
   // Initial message to Claude
   const messages: Anthropic.MessageParam[] = [

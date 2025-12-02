@@ -101,6 +101,76 @@ export async function trashEmail(messageId: string): Promise<boolean> {
   return result.success;
 }
 
+export async function createLabel(name: string): Promise<{ id: string; name: string } | null> {
+  const result = await callGmailApi<{ id: string; name: string }>('/api/labels', 'POST', { name });
+  return result.success ? (result.data || result as unknown as { id: string; name: string }) : null;
+}
+
+export async function deleteLabel(labelId: string): Promise<boolean> {
+  const result = await callGmailApi(`/api/labels/${labelId}`, 'DELETE');
+  return result.success;
+}
+
+export async function starEmail(messageId: string): Promise<boolean> {
+  const result = await callGmailApi(`/api/emails/${messageId}/star`, 'POST');
+  return result.success;
+}
+
+export async function unstarEmail(messageId: string): Promise<boolean> {
+  const result = await callGmailApi(`/api/emails/${messageId}/star`, 'DELETE');
+  return result.success;
+}
+
+export async function archiveEmail(messageId: string): Promise<boolean> {
+  const result = await callGmailApi(`/api/emails/${messageId}/archive`, 'POST');
+  return result.success;
+}
+
+export async function batchModifyEmails(
+  messageIds: string[],
+  addLabelIds?: string[],
+  removeLabelIds?: string[]
+): Promise<boolean> {
+  const result = await callGmailApi('/api/emails/batch/labels', 'POST', {
+    messageIds,
+    addLabelIds,
+    removeLabelIds,
+  });
+  return result.success;
+}
+
+export async function getLabels(): Promise<Array<{ id: string; name: string; type: string }>> {
+  const result = await callGmailApi<Array<{ id: string; name: string; type: string }>>('/api/labels');
+  return (result as unknown as { labels?: Array<{ id: string; name: string; type: string }> }).labels || [];
+}
+
+export interface UnsubscribeInfo {
+  email: {
+    id: string;
+    subject: string;
+    from: string;
+  };
+  unsubscribeLinks: string[];
+  unsubscribeEmail: string | null;
+  hasUnsubscribe: boolean;
+}
+
+export async function getUnsubscribeInfo(messageId: string): Promise<UnsubscribeInfo | null> {
+  const result = await callGmailApi<UnsubscribeInfo>(`/api/emails/${messageId}/unsubscribe`);
+  return result.success ? (result as unknown as UnsubscribeInfo) : null;
+}
+
+export interface MarketingEmail extends EmailMessage {
+  unsubscribeLinks: string[];
+  unsubscribeEmail: string | null;
+  hasUnsubscribe: boolean;
+}
+
+export async function findMarketingEmails(maxResults: number = 10): Promise<MarketingEmail[]> {
+  const result = await callGmailApi<MarketingEmail[]>(`/api/emails/marketing?maxResults=${maxResults}`);
+  return (result as unknown as { emails?: MarketingEmail[] }).emails || [];
+}
+
 export function formatEmailForSlack(email: EmailMessage, includeBody: boolean = false): string {
   const lines = [
     `*Subject:* ${email.subject}`,
