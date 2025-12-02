@@ -1,15 +1,16 @@
 # Gmail Slack Bot 📧
 
-A Slack bot that lets you manage your Gmail inbox directly from Slack using slash commands. Built with [Slack Bolt](https://slack.dev/bolt-js) and deployed on Railway.
+A Slack bot that lets you manage your Gmail inbox directly from Slack using natural language. Powered by Claude AI for intelligent email interactions. Built with [Slack Bolt](https://slack.dev/bolt-js) and deployed on Railway.
 
 ## Features
 
-- 📬 **List emails** - View recent emails from your inbox
-- 🔍 **Search** - Use Gmail's powerful search syntax
-- 📖 **Read** - View full email content
-- ✉️ **Send** - Compose and send emails
-- ✅ **Mark as read** - Mark emails as read
-- 🗑️ **Trash** - Move emails to trash
+- 🤖 **Natural Language** - Just type `/gmail` and ask in plain English
+- 📬 **Full Gmail Access** - List, search, read, send, star, archive, and more
+- 🔍 **Smart Search** - All Gmail search operators supported
+- ✉️ **Compose Emails** - Claude helps write professional emails
+- 🏷️ **Label Management** - Create, apply, and manage labels
+- 📧 **Batch Operations** - Star all emails from a sender, etc.
+- 🔗 **Unsubscribe Helper** - Find and unsubscribe from marketing emails
 - All responses are **ephemeral** (only visible to you)
 
 ## Architecture
@@ -31,9 +32,29 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 
 ## Slash Commands
 
+### Main Command (Natural Language)
+
+| Command | Description |
+|---------|-------------|
+| `/gmail <anything>` | Ask in plain English - Claude handles it! |
+
+**Examples:**
+```
+/gmail show me unread emails
+/gmail emails from last week with attachments
+/gmail find large emails over 5MB
+/gmail send an email to john@example.com about the project deadline
+/gmail star all emails from my boss
+/gmail promotional emails I can unsubscribe from
+/gmail what are my most recent emails from Amazon?
+/gmail compose a professional reply declining the meeting
+```
+
+### Direct Commands
+
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/gmail [count]` | List recent emails (default: 5, max: 10) | `/gmail 10` |
+| `/gmail-list [count]` | List recent emails (default: 5, max: 10) | `/gmail-list 10` |
 | `/gmail-unread [count]` | List unread emails | `/gmail-unread` |
 | `/gmail-search <query>` | Search emails using Gmail syntax | `/gmail-search from:boss@company.com` |
 | `/gmail-read <id>` | Read a specific email by ID | `/gmail-read 19abc123def` |
@@ -42,18 +63,31 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 | `/gmail-trash <id>` | Move email to trash | `/gmail-trash 19abc123def` |
 | `/gmail-help` | Show help message | `/gmail-help` |
 
-### Search Examples
+### Gmail Search Syntax (for `/gmail-search`)
 
-Gmail search syntax is fully supported:
+All Gmail search operators are supported:
 
 ```
-/gmail-search from:newsletter@company.com
-/gmail-search subject:urgent
-/gmail-search is:starred
-/gmail-search after:2024/01/01 before:2024/12/31
-/gmail-search has:attachment
-/gmail-search in:sent to:client@example.com
-/gmail-search label:important
+# People
+from:sender@email.com    to:recipient@email.com    cc:someone@email.com
+
+# Content
+subject:meeting          "exact phrase"            word1 OR word2
+-excludeword
+
+# Status
+is:unread    is:starred    is:important    is:snoozed
+
+# Attachments
+has:attachment    filename:pdf    larger:5M    smaller:1M
+has:drive         has:document    has:spreadsheet
+
+# Location
+in:inbox    in:sent    in:drafts    in:trash    label:work
+category:primary    category:social    category:promotions
+
+# Time
+after:2024/01/01    before:2024/12/31    newer_than:7d    older_than:1m
 ```
 
 ## Setup Guide
@@ -102,6 +136,7 @@ Or deploy manually:
 | `SLACK_SIGNING_SECRET` | Yes | Signing Secret from Basic Information |
 | `GMAIL_API_URL` | Yes | URL of your Gmail HTTP API |
 | `GMAIL_API_KEY` | Yes | API key for Gmail HTTP API |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude AI |
 | `PORT` | No | Server port (default: 3000) |
 
 ### Step 6: Add Slash Commands
@@ -114,7 +149,8 @@ Or deploy manually:
 
 | Command | Request URL | Description |
 |---------|-------------|-------------|
-| `/gmail` | `https://your-app.railway.app/slack/events` | List recent emails |
+| `/gmail` | `https://your-app.railway.app/slack/events` | Natural language assistant (main) |
+| `/gmail-list` | `https://your-app.railway.app/slack/events` | List recent emails |
 | `/gmail-search` | `https://your-app.railway.app/slack/events` | Search emails |
 | `/gmail-read` | `https://your-app.railway.app/slack/events` | Read an email |
 | `/gmail-send` | `https://your-app.railway.app/slack/events` | Send an email |
@@ -161,7 +197,8 @@ Then use the ngrok URL as your Request URL in Slack.
 gmail-slack-bot/
 ├── src/
 │   ├── index.ts          # Slack Bolt app and command handlers
-│   └── gmail-client.ts   # Gmail HTTP API client
+│   ├── gmail-client.ts   # Gmail HTTP API client
+│   └── gmail-assistant.ts # Claude-powered natural language assistant
 ├── Dockerfile            # Docker configuration
 ├── package.json
 └── tsconfig.json
