@@ -23,6 +23,19 @@ const app = new App({
 // SLASH COMMANDS
 // ===================
 
+// Simple request logging (no sensitive content)
+function logRequest(userId: string, command: string, status: 'start' | 'success' | 'error', error?: string) {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    userId,
+    command: command.substring(0, 50) + (command.length > 50 ? '...' : ''), // Truncate for privacy
+    status,
+    ...(error && { error }),
+  };
+  console.log(JSON.stringify(logEntry));
+}
+
 // /gmail - Natural language Gmail assistant powered by Claude (main command)
 // Now with conversation memory per user!
 app.command('/gmail', async ({ command, ack, respond }) => {
@@ -55,18 +68,22 @@ app.command('/gmail', async ({ command, ack, respond }) => {
     text: '🤔 Processing your request...',
   });
 
+  logRequest(userId, request, 'start');
+
   try {
     const result = await processNaturalLanguageRequest(request, userId);
+    logRequest(userId, request, 'success');
     await respond({
       response_type: 'ephemeral',
-      text: `🤖 *Gmail Assistant*\n\n${result}`,
+      text: `> _${request}_\n\n🤖 *Gmail Assistant*\n\n${result}`,
       replace_original: true,
     });
   } catch (error) {
-    console.error('Error processing natural language request:', error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    logRequest(userId, request, 'error', errorMsg);
     await respond({
       response_type: 'ephemeral',
-      text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      text: `> _${request}_\n\n❌ Error: ${errorMsg}`,
       replace_original: true,
     });
   }
