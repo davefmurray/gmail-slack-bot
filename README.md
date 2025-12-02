@@ -5,12 +5,14 @@ A Slack bot that lets you manage your Gmail inbox directly from Slack using natu
 ## Features
 
 - 🤖 **Natural Language** - Just type `/gmail` and ask in plain English
+- 💬 **Conversation Memory** - Multi-turn conversations for complex tasks (30-min timeout)
 - 📬 **Full Gmail Access** - List, search, read, send, star, archive, and more
 - 🔍 **Smart Search** - All Gmail search operators supported
 - ✉️ **Compose Emails** - Claude helps write professional emails
 - 🏷️ **Label Management** - Create, apply, and manage labels
 - 📧 **Batch Operations** - Star all emails from a sender, etc.
 - 🔗 **Unsubscribe Helper** - Find and unsubscribe from marketing emails
+- 📝 **Request Logging** - Structured JSON logs for debugging
 - All responses are **ephemeral** (only visible to you)
 
 ## Architecture
@@ -37,6 +39,23 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 | Command | Description |
 |---------|-------------|
 | `/gmail <anything>` | Ask in plain English - Claude handles it! |
+| `/gmail clear` | Reset conversation memory and start fresh |
+
+**Conversation Memory:** The bot remembers your conversation for 30 minutes! You can reference previous results:
+
+```
+/gmail show me marketing emails
+> Here are 5 marketing emails...
+>   1. Amazon Newsletter
+>   2. LinkedIn Updates
+>   ...
+
+/gmail unsubscribe from 1 and 3
+> ✅ Here are the unsubscribe links for Amazon and LinkedIn...
+
+/gmail trash the second one
+> 🗑️ LinkedIn Updates moved to trash
+```
 
 **Examples:**
 ```
@@ -48,6 +67,7 @@ This bot connects to a separate [Gmail HTTP API](https://github.com/davefmurray/
 /gmail promotional emails I can unsubscribe from
 /gmail what are my most recent emails from Amazon?
 /gmail compose a professional reply declining the meeting
+/gmail clear   # Reset conversation
 ```
 
 ### Direct Commands
@@ -213,6 +233,8 @@ gmail-slack-bot/
 - All Slack responses are **ephemeral** (only visible to the user who ran the command)
 - Email content is never posted to public channels
 - API keys should be stored as environment variables, never committed to code
+- Request logs are privacy-conscious: commands truncated to 50 chars, no email content logged
+- Conversation memory is per-user and auto-expires after 30 minutes
 
 ## Troubleshooting
 
