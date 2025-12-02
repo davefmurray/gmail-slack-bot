@@ -1,6 +1,7 @@
 /**
  * Claude-powered Gmail Assistant
  * Handles natural language requests for email operations
+ * Now with conversation memory per user!
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -25,6 +26,54 @@ import {
 } from './gmail-client.js';
 
 const anthropic = new Anthropic();
+
+// Conversation memory storage
+// Key: Slack user ID, Value: { messages, lastActivity, context }
+interface ConversationState {
+  messages: Anthropic.MessageParam[];
+  lastActivity: number;
+  context: string; // Summary of what we're working on
+}
+
+const conversationMemory = new Map<string, ConversationState>();
+
+// Memory timeout: 30 minutes of inactivity clears conversation
+const MEMORY_TIMEOUT_MS = 30 * 60 * 1000;
+
+// Max messages to keep in history (to avoid token limits)
+const MAX_HISTORY_MESSAGES = 20;
+
+// Clean up old conversations periodically
+function cleanupOldConversations() {
+  const now = Date.now();
+  for (const [userId, state] of conversationMemory.entries()) {
+    if (now - state.lastActivity > MEMORY_TIMEOUT_MS) {
+      conversationMemory.delete(userId);
+    }
+  }
+}
+
+// Get or create conversation state for a user
+function getConversationState(userId: string): ConversationState {
+  cleanupOldConversations();
+
+  if (!conversationMemory.has(userId)) {
+    conversationMemory.set(userId, {
+      messages: [],
+      lastActivity: Date.now(),
+      context: '',
+    });
+  }
+
+  const state = conversationMemory.get(userId)!;
+  state.lastActivity = Date.now();
+  return state;
+}
+
+// Clear conversation for a user
+export function clearConversation(userId: string): void {
+  conversationMemory.delete(userId);
+}
 
 // Tool definitions for Claude
 const tools: Anthropic.Tool[] = [
@@ -518,9 +567,14 @@ function getDateContext(): string {
 }
 
 // Main function to process natural language requests
+// Now with conversation memory per user!
 export async function processNaturalLanguageRequest(
-  userRequest: string
+  userRequest: string,
+  userId: string = 'default'
 ): Promise<string> {
+  // Get or create conversation state for this user
+  const state = getConversationState(userId);
+
   const systemPrompt = `You are a helpful Gmail assistant integrated with Slack. You help users manage their email through natural language.
 
 ${getDateContext()}
@@ -539,6 +593,13 @@ Your capabilities:
 - Find marketing/promotional emails and help users unsubscribe
 - Get unsubscribe links from emails
 
+CONVERSATION MEMORY:
+- You now have conversation memory! You can remember previous messages in this chat.
+- Users can refer to previous results like "unsubscribe from 1, 3, and 5" or "trash the second one"
+- When users reference numbers or "that email", look at your previous responses to understand context
+- If you showed a list of emails, remember those IDs for follow-up actions
+- Conversations reset after 30 minutes of inactivity or when the user says "clear", "reset", or "start over"
+
 Guidelines:
 - When users ask about "recent" or "latest" emails, use list_recent_emails
 - When users want emails from a time period (last week, yesterday, etc.), convert to Gmail date syntax (after:YYYY/MM/DD or newer_than:Xd)
@@ -546,15 +607,7 @@ Guidelines:
 - When searching, be smart about converting natural language to Gmail search operators
 - Always be concise in your responses - this is Slack, not email
 - If you need more information to complete a request (like an email address to send to), ask for it
-
-CRITICAL - STATELESS CONVERSATIONS:
-- Each /gmail command is a NEW conversation with NO memory of previous messages
-- NEVER ask follow-up questions that require the user to reply with choices like "which numbers?" or "reply with 1, 2, 3"
-- The user CANNOT reply to you - their next message will start a fresh conversation
-- Instead, ALWAYS complete actions in a single response or provide ALL information upfront
-- For unsubscribe: Show the unsubscribe links directly so users can click them immediately
-- For ambiguous requests: Make a reasonable assumption and act, or provide all options with full details
-- DO NOT say "let me know which ones" or "reply with your choice" - this will NOT work
+- You CAN now ask follow-up questions since conversations persist!
 
 Examples of query conversions:
 - "emails from last week" → "newer_than:7d"
@@ -577,8 +630,8 @@ Examples of query conversions:
 For unsubscribe requests:
 - Use find_marketing_emails to find promotional emails with unsubscribe links
 - Use get_unsubscribe_info to get unsubscribe details for a specific email
-- ALWAYS show clickable unsubscribe links immediately - don't ask the user to pick numbers first
-- Format: Show sender name and the actual unsubscribe link so users can click directly
+- Show clickable unsubscribe links so users can click directly
+- Format: Show sender name and the actual unsubscribe link
 - Example response format:
   "Here are your marketing emails with unsubscribe links:
    1. **Amazon** - <https://unsubscribe.amazon.com/xxx|Unsubscribe>
@@ -589,10 +642,16 @@ For batch operations:
 - Then use batch_star_emails or batch_apply_label with the IDs
 - Example: "Star all emails from boss@company.com" → search, collect IDs, then batch star`;
 
-  // Initial message to Claude
-  const messages: Anthropic.MessageParam[] = [
-    { role: 'user', content: userRequest },
-  ];
+  // Add the new user message to conversation history
+  state.messages.push({ role: 'user', content: userRequest });
+
+  // Trim history if it gets too long (keep most recent messages)
+  while (state.messages.length > MAX_HISTORY_MESSAGES) {
+    state.messages.shift();
+  }
+
+  // Use the full conversation history
+  const messages = [...state.messages];
 
   let response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -639,5 +698,16 @@ For batch operations:
     (block): block is Anthropic.TextBlock => block.type === 'text'
   );
 
-  return textBlocks.map((block) => block.text).join('\n') || 'I processed your request but have no response to show.';
+  const finalResponse = textBlocks.map((block) => block.text).join('\n') || 'I processed your request but have no response to show.';
+
+  // Save the final assistant response to conversation history
+  // We save only the text response (not tool calls) to keep history clean
+  state.messages.push({ role: 'assistant', content: finalResponse });
+
+  // Trim history again if needed after adding the response
+  while (state.messages.length > MAX_HISTORY_MESSAGES) {
+    state.messages.shift();
+  }
+
+  return finalResponse;
 }

@@ -10,7 +10,7 @@ import {
   formatEmailForSlack,
   formatEmailListForSlack,
 } from './gmail-client.js';
-import { processNaturalLanguageRequest } from './gmail-assistant.js';
+import { processNaturalLanguageRequest, clearConversation } from './gmail-assistant.js';
 
 // Initialize Slack Bolt app
 const app = new App({
@@ -24,14 +24,27 @@ const app = new App({
 // ===================
 
 // /gmail - Natural language Gmail assistant powered by Claude (main command)
+// Now with conversation memory per user!
 app.command('/gmail', async ({ command, ack, respond }) => {
   await ack();
 
+  const userId = command.user_id;
   const request = command.text.trim();
+
+  // Check for clear/reset commands
+  if (request.toLowerCase() === 'clear' || request.toLowerCase() === 'reset' || request.toLowerCase() === 'start over') {
+    clearConversation(userId);
+    await respond({
+      response_type: 'ephemeral',
+      text: `🔄 Conversation cleared! Starting fresh.`,
+    });
+    return;
+  }
+
   if (!request) {
     await respond({
       response_type: 'ephemeral',
-      text: `📧 *Gmail Assistant*\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\nType \`/gmail-help\` for all available commands.`,
+      text: `📧 *Gmail Assistant* (with conversation memory!)\n\nJust type what you need in plain English!\n\n*Examples:*\n• \`/gmail show me unread emails\`\n• \`/gmail emails from last week\`\n• \`/gmail find emails with attachments from John\`\n• \`/gmail send an email to bob@example.com about the meeting\`\n• \`/gmail star all emails from my boss\`\n\n*Conversation Commands:*\n• \`/gmail clear\` - Reset conversation memory\n\nType \`/gmail-help\` for all available commands.`,
     });
     return;
   }
@@ -43,7 +56,7 @@ app.command('/gmail', async ({ command, ack, respond }) => {
   });
 
   try {
-    const result = await processNaturalLanguageRequest(request);
+    const result = await processNaturalLanguageRequest(request, userId);
     await respond({
       response_type: 'ephemeral',
       text: `🤖 *Gmail Assistant*\n\n${result}`,
@@ -285,6 +298,12 @@ app.command('/gmail-help', async ({ ack, respond }) => {
 *📧 Gmail Slack Bot - Full Feature List*
 
 *🤖 Main Command:* \`/gmail <anything>\` - Ask in plain English!
+💬 *NEW: Conversation memory!* I remember our chat for 30 mins.
+
+*🧠 CONVERSATION FEATURES:*
+• Multi-turn conversations - refer to previous results
+• Say "unsubscribe from 1, 3, 5" after seeing a list
+• \`/gmail clear\` - Reset conversation memory
 
 *📬 EMAIL OPERATIONS (17):*
 • List/search emails • Read email content
