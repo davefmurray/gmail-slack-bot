@@ -10,6 +10,7 @@ import {
   formatEmailForSlack,
   formatEmailListForSlack,
 } from './gmail-client.js';
+import { processNaturalLanguageRequest } from './gmail-assistant.js';
 
 // Initialize Slack Bolt app
 const app = new App({
@@ -240,6 +241,42 @@ app.command('/gmail-trash', async ({ command, ack, respond }) => {
   }
 });
 
+// /gmail-ask - Natural language Gmail assistant powered by Claude
+app.command('/gmail-ask', async ({ command, ack, respond }) => {
+  await ack();
+
+  const request = command.text.trim();
+  if (!request) {
+    await respond({
+      response_type: 'ephemeral',
+      text: '❌ Please provide a request. Example: `/gmail-ask show me unread emails from this week`',
+    });
+    return;
+  }
+
+  // Send a "thinking" message since Claude may take a moment
+  await respond({
+    response_type: 'ephemeral',
+    text: '🤔 Processing your request...',
+  });
+
+  try {
+    const result = await processNaturalLanguageRequest(request);
+    await respond({
+      response_type: 'ephemeral',
+      text: `🤖 *Gmail Assistant*\n\n${result}`,
+      replace_original: true,
+    });
+  } catch (error) {
+    console.error('Error processing natural language request:', error);
+    await respond({
+      response_type: 'ephemeral',
+      text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      replace_original: true,
+    });
+  }
+});
+
 // /gmail-help - Show available commands
 app.command('/gmail-help', async ({ ack, respond }) => {
   await ack();
@@ -247,6 +284,14 @@ app.command('/gmail-help', async ({ ack, respond }) => {
   const helpText = `
 *📧 Gmail Slack Bot Commands*
 
+*🤖 AI-Powered (Natural Language):*
+\`/gmail-ask <anything>\` - Ask in plain English!
+  • "Show me emails from last week"
+  • "Find unread emails with attachments"
+  • "Compose a professional email to john@example.com about the meeting"
+  • "What are my most recent emails from Amazon?"
+
+*📋 Direct Commands:*
 \`/gmail [count]\` - List recent emails (default: 5, max: 10)
 \`/gmail-unread [count]\` - List unread emails
 \`/gmail-search <query>\` - Search emails (uses Gmail search syntax)
