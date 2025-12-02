@@ -547,6 +547,15 @@ Guidelines:
 - Always be concise in your responses - this is Slack, not email
 - If you need more information to complete a request (like an email address to send to), ask for it
 
+CRITICAL - STATELESS CONVERSATIONS:
+- Each /gmail command is a NEW conversation with NO memory of previous messages
+- NEVER ask follow-up questions that require the user to reply with choices like "which numbers?" or "reply with 1, 2, 3"
+- The user CANNOT reply to you - their next message will start a fresh conversation
+- Instead, ALWAYS complete actions in a single response or provide ALL information upfront
+- For unsubscribe: Show the unsubscribe links directly so users can click them immediately
+- For ambiguous requests: Make a reasonable assumption and act, or provide all options with full details
+- DO NOT say "let me know which ones" or "reply with your choice" - this will NOT work
+
 Examples of query conversions:
 - "emails from last week" → "newer_than:7d"
 - "unread emails from John" → "from:john is:unread"
@@ -568,7 +577,12 @@ Examples of query conversions:
 For unsubscribe requests:
 - Use find_marketing_emails to find promotional emails with unsubscribe links
 - Use get_unsubscribe_info to get unsubscribe details for a specific email
-- Present unsubscribe links clearly so users can click them
+- ALWAYS show clickable unsubscribe links immediately - don't ask the user to pick numbers first
+- Format: Show sender name and the actual unsubscribe link so users can click directly
+- Example response format:
+  "Here are your marketing emails with unsubscribe links:
+   1. **Amazon** - <https://unsubscribe.amazon.com/xxx|Unsubscribe>
+   2. **Newsletter** - <https://example.com/unsub|Unsubscribe>"
 
 For batch operations:
 - First search for the emails to get their IDs
