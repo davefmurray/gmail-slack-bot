@@ -1,4 +1,5 @@
-import { App, LogLevel } from '@slack/bolt';
+import pkg from '@slack/bolt';
+const { App, LogLevel } = pkg;
 import {
   listEmails,
   searchEmails,
