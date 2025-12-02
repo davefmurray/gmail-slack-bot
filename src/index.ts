@@ -124,15 +124,23 @@ app.command('/gmail', async ({ command, ack, respond, client }) => {
 
   // Check for session start command
   if (request.toLowerCase() === 'start') {
-    // Post a message to the channel to start a thread
-    const result = await client.chat.postMessage({
-      channel: channelId,
-      text: `🟢 *Gmail Session Started* for <@${userId}>\n\nReply in this thread to chat with your Gmail assistant. I'll remember our conversation!\n\n_Type \`stop\` or \`done\` to end the session. Session expires after 30 minutes of inactivity._`,
-    });
+    try {
+      // Post a message to the channel to start a thread
+      const result = await client.chat.postMessage({
+        channel: channelId,
+        text: `🟢 *Gmail Session Started* for <@${userId}>\n\nReply in this thread to chat with your Gmail assistant. I'll remember our conversation!\n\n_Type \`stop\` or \`done\` to end the session. Session expires after 30 minutes of inactivity._`,
+      });
 
-    if (result.ts) {
-      createSession(userId, channelId, result.ts);
-      logRequest(userId, 'session_start', 'success');
+      if (result.ts) {
+        createSession(userId, channelId, result.ts);
+        logRequest(userId, 'session_start', 'success');
+      }
+    } catch (error) {
+      console.error('Error starting session:', error);
+      await respond({
+        response_type: 'ephemeral',
+        text: `❌ Failed to start session: ${error instanceof Error ? error.message : 'Unknown error'}\n\nMake sure the bot is invited to this channel.`,
+      });
     }
     return;
   }
